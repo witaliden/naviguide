@@ -1,21 +1,6 @@
 import { useState, useEffect } from 'react';
 import { routeService } from '../services/routeService';
-
-interface Route {
-    id: number;
-    name: string;
-    description: string;
-    waypoints?: Waypoint[];
-}
-
-interface Waypoint {
-    id: number;
-    name: string;
-    description: string;
-    lat: number;
-    lng: number;
-    route_id: number;
-}
+import { Route, Waypoint } from '../types/models';
 
 export const useRoutes = () => {
     const [routes, setRoutes] = useState<Route[]>([]);

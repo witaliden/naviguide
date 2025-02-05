@@ -2,23 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'rea
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { routeService } from '../../services/routeService';
 import { useState, useEffect } from 'react';
-
-// Definiujemy interfejsy
-interface Waypoint {
-  id: number;
-  name: string;
-  description: string;
-  lat: number;
-  lng: number;
-  route_id: number;
-}
-
-interface Route {
-  id: number;
-  name: string;
-  description: string;
-  waypoints?: Waypoint[];
-}
+import { Route, Waypoint } from '../../types/models';
 
 export default function RouteDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -64,8 +48,8 @@ export default function RouteDetailsScreen() {
 
   const handleStartNavigation = () => {
     router.push({
-      pathname: "/route/[id]",
-      params: { id }
+      pathname: "/navigation/[id]",
+      params: { id: Array.isArray(id) ? id[0] : id }
     });
   };
 
