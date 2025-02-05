@@ -1,72 +1,95 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Linking } from 'react-native';
+import { View, StyleSheet, Text, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
 import { WebView } from 'react-native-webview';
 import { routeService } from '../../services/routeService';
 import * as Location from 'expo-location';
 import { Route, Waypoint } from '../../types/models';
+import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView, TouchableOpacity } from 'react-native-gesture-handler';
+
 
 export default function NavigationScreen() {
   const googleMapsApiKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
   const { id } = useLocalSearchParams();
   const [route, setRoute] = useState<Route | null>(null);
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Ładowanie trasy i lokalizacji
   useEffect(() => {
     loadRouteAndLocation();
   }, [id]);
 
+  // Po ustawieniu trasy, zapisujemy waypointy do stanu (pozwala to na zmianę kolejności)
+  useEffect(() => {
+    if (route?.waypoints) {
+      console.log('Setting waypoints:', route.waypoints);
+      // Tworzymy kopię, aby nie modyfikować oryginalnego obiektu
+      setWaypoints([...route.waypoints]);
+    }
+  }, [route]);
+
   const loadRouteAndLocation = async () => {
     try {
-      // Pobierz trasę
+      // Pobierz trasę z backendu (lub cache)
       const routeData = await routeService.getRouteWithWaypoints(Number(id));
       setRoute(routeData);
 
-      // Pobierz lokalizację
+      // Pobierz lokalizację użytkownika
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         throw new Error('Permission to access location was denied');
       }
-
       const location = await Location.getCurrentPositionAsync({});
       console.log('Location:', location);
       setCurrentLocation({
         lat: location.coords.latitude,
-        lng: location.coords.longitude
+        lng: location.coords.longitude,
       });
     } catch (error) {
       console.error('Error:', error);
     }
   };
 
-  const openFullNavigation = (waypoints: Waypoint[], currentLocation: { lat: number; lng: number }) => {
-    // Dodaj aktualną lokalizację jako punkt startowy
+  // Funkcja otwierająca nawigację dla wszystkich punktów według bieżącej kolejności
+  const openFullNavigation = (
+    orderedWaypoints: Waypoint[],
+    currentLocation: { lat: number; lng: number }
+  ) => {
+    // Aktualna lokalizacja jako punkt startowy:
     const origin = `${currentLocation.lat},${currentLocation.lng}`;
-    const destination = waypoints[waypoints.length - 1];
-    const waypointsStr = waypoints.slice(0, -1)
+    // Ostatni punkt na liście jako destynacja:
+    const destination = orderedWaypoints[orderedWaypoints.length - 1];
+    // Pozostałe punkty to waypointy (łączymy je separatorem "|")
+    const waypointsStr = orderedWaypoints
+      .slice(0, -1)
       .map(wp => `${wp.lat},${wp.lng}`)
       .join('|');
-  
+
     const url = `google.navigation:q=${destination.lat},${destination.lng}&waypoints=${waypointsStr}`;
-    
     Linking.openURL(url).catch(() => {
-      // Fallback dla iOS lub gdy Google Maps nie jest zainstalowane
-      const mapsUrl = `https://www.google.com/maps/dir/?api=1`
-        + `&origin=${origin}`
-        + `&destination=${destination.lat},${destination.lng}`
-        + `&waypoints=${waypointsStr}`
-        + `&travelmode=driving`;
+      // Fallback – otwiera Google Maps w przeglądarce
+      const mapsUrl =
+        `https://www.google.com/maps/dir/?api=1` +
+        `&origin=${origin}` +
+        `&destination=${destination.lat},${destination.lng}` +
+        `&waypoints=${waypointsStr}` +
+        `&travelmode=driving`;
       Linking.openURL(mapsUrl);
     });
   };
 
-  // HTML dla WebView z Google Maps
+  // Funkcja generująca HTML dla WebView z mapą Google,
+  // wykorzystując aktualną kolejność waypointów
   const getMapHTML = () => {
-    if (!route || !currentLocation) {return ''};
-    console.log('2 Route:', route);
-    console.log('2 Current location:', currentLocation);
-    
+    if (!route || !currentLocation || !waypoints?.length) {
+      console.log('Missing data for map:', { route, currentLocation, waypoints });
+      return '';
+    }
+
+    console.log('Generating map with waypoints:', waypoints);
     return `
       <!DOCTYPE html>
       <html>
@@ -87,7 +110,7 @@ export default function NavigationScreen() {
                 center: { lat: ${currentLocation.lat}, lng: ${currentLocation.lng} }
               });
 
-              // Dodaj marker aktualnej lokalizacji
+              // Marker aktualnej lokalizacji
               new google.maps.Marker({
                 position: { lat: ${currentLocation.lat}, lng: ${currentLocation.lng} },
                 map: map,
@@ -95,7 +118,7 @@ export default function NavigationScreen() {
               });
 
               // Dodaj markery dla waypointów
-              ${route.waypoints.map((wp, index) => `
+              ${waypoints.map((wp, index) => `
                 new google.maps.Marker({
                   position: { lat: ${wp.lat}, lng: ${wp.lng} },
                   map: map,
@@ -104,20 +127,18 @@ export default function NavigationScreen() {
                 });
               `).join('')}
 
-              // Narysuj trasę między punktami
+              // Rysowanie trasy między punktami
               const directionsService = new google.maps.DirectionsService();
               const directionsRenderer = new google.maps.DirectionsRenderer({
                 map: map
               });
-
-              const waypoints = ${JSON.stringify(route.waypoints.map(wp => ({
+              const waypointsJs = ${JSON.stringify(waypoints.map(wp => ({
                 location: { lat: wp.lat, lng: wp.lng }
               })))};
-
               directionsService.route({
                 origin: { lat: ${currentLocation.lat}, lng: ${currentLocation.lng} },
-                destination: waypoints[waypoints.length - 1].location,
-                waypoints: waypoints.slice(0, -1),
+                destination: waypointsJs[waypointsJs.length - 1].location,
+                waypoints: waypointsJs.slice(0, -1),
                 travelMode: 'DRIVING'
               }, (response, status) => {
                 if (status === 'OK') {
@@ -132,14 +153,41 @@ export default function NavigationScreen() {
     `;
   };
 
+  // Funkcja renderująca pojedynczy element listy waypointów
+  const renderWaypoint = (params: RenderItemParams<Waypoint>): JSX.Element => {
+    const { item, drag, isActive, getIndex } = params;
+    const index = getIndex() !== undefined ? getIndex() : 0;
+    const safeIndex = index ?? 0;
+    return (
+      <ScaleDecorator>
+        <TouchableOpacity
+          activeOpacity={1}
+          onLongPress={drag}
+          disabled={isActive}
+          style={[
+            styles.waypointItem,
+            { backgroundColor: isActive ? '#f0f0f0' : 'white' },
+          ]}
+        >
+          <View style={styles.waypointContent}>
+            <Text style={styles.waypointName}>
+              {safeIndex + 1}. {item.name}
+            </Text>
+            <Text style={styles.waypointDescription}>{item.description}</Text>
+          </View>
+        </TouchableOpacity>
+      </ScaleDecorator>
+    );
+  };
+
   if (!route || !currentLocation) {
     return <Text>Loading...</Text>;
   }
 
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
       <WebView
-        key={`${currentLocation.lat}-${currentLocation.lng}`}
+        key={`map-${waypoints.map(w => w.id).join('-')}`}
         style={styles.map}
         source={{ html: getMapHTML() }}
         javaScriptEnabled={true}
@@ -153,27 +201,23 @@ export default function NavigationScreen() {
       <View style={styles.waypointsList}>
         <TouchableOpacity
           style={styles.navigateAllButton}
-          onPress={() => openFullNavigation(route.waypoints, currentLocation)}
+          onPress={() => openFullNavigation(waypoints, currentLocation)}
         >
-          <Text style={styles.navigateAllButtonText}>Navigate Through All Points</Text>
+          <Text style={styles.navigateAllButtonText}>
+            Navigate Through All Points
+          </Text>
         </TouchableOpacity>
-        <View style={styles.waypointsContainer}>
-          {route.waypoints.map((waypoint, index) => (
-            <View
-              key={waypoint.id}
-              style={styles.waypointItem}
-            >
-              <Text style={styles.waypointName}>
-                {index + 1}. {waypoint.name}
-              </Text>
-              <Text style={styles.waypointDescription}>
-                {waypoint.description}
-              </Text>
-            </View>
-          ))}
-        </View>
+        <DraggableFlatList
+          data={waypoints}
+          onDragEnd={({ data }) => {
+            console.log('New waypoints order:', data);
+            setWaypoints([...data]);
+          }}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderWaypoint}
+        />
       </View>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -222,5 +266,11 @@ const styles = StyleSheet.create({
   waypointDescription: {
     fontSize: 14,
     color: '#666',
+  },
+  waypointContent: {
+    flex: 1,
+  },
+  dragHandle: {
+    padding: 10,
   },
 });
