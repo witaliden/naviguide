@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Linking } from 'react-native';
+import { View, StyleSheet, Text, Linking, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
 import { WebView } from 'react-native-webview';
@@ -8,36 +8,48 @@ import * as Location from 'expo-location';
 import { Route, Waypoint } from '../../types/models';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView, TouchableOpacity } from 'react-native-gesture-handler';
+import Sound from 'react-native-sound';
 
+Sound.setCategory('Playback');
+const arrivalSound = new Sound('arrival.mp3', Sound.MAIN_BUNDLE, error => {
+  if (error) {
+    console.error('Failed to load the sound', error);
+  }
+});
 
-export default function NavigationScreen() {
+const getDistance = (
+  lat1: number, lon1: number, lat2: number, lon2: number
+): number => {
+  const R = 6371e3; // promień Ziemi w metrach
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Przenieś deklarację funkcji loadRouteAndLocation na początek,
+// aby można było ją wywołać w useEffect poniżej
+const NavigationScreen = () => {
   const googleMapsApiKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
   const { id } = useLocalSearchParams();
   const [route, setRoute] = useState<Route | null>(null);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [reached, setReached] = useState<number[]>([]);
 
-  // Ładowanie trasy i lokalizacji
-  useEffect(() => {
-    loadRouteAndLocation();
-  }, [id]);
-
-  // Po ustawieniu trasy, zapisujemy waypointy do stanu (pozwala to na zmianę kolejności)
-  useEffect(() => {
-    if (route?.waypoints) {
-      console.log('Setting waypoints:', route.waypoints);
-      // Tworzymy kopię, aby nie modyfikować oryginalnego obiektu
-      setWaypoints([...route.waypoints]);
-    }
-  }, [route]);
-
+  // Funkcja ładowania trasy oraz lokalizacji
   const loadRouteAndLocation = async () => {
     try {
-      // Pobierz trasę z backendu (lub cache)
       const routeData = await routeService.getRouteWithWaypoints(Number(id));
       setRoute(routeData);
 
-      // Pobierz lokalizację użytkownika
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         throw new Error('Permission to access location was denied');
@@ -53,16 +65,81 @@ export default function NavigationScreen() {
     }
   };
 
-  // Funkcja otwierająca nawigację dla wszystkich punktów według bieżącej kolejności
+  useEffect(() => {
+    loadRouteAndLocation();
+  }, [id]);
+
+  // Po ustawieniu trasy kopiujemy waypointy do stanu (umożliwia zmianę kolejności)
+  useEffect(() => {
+    if (route?.waypoints) {
+      console.log('Setting waypoint order:', route.waypoints);
+      setWaypoints([...route.waypoints]);
+    }
+  }, [route]);
+
+  // Subskrypcja aktualizacji lokalizacji
+  useEffect(() => {
+    let subscription: Location.LocationSubscription;
+    const startWatching = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          throw new Error('Permission to access location was denied');
+        }
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (loc) => {
+            const newLocation = {
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+            };
+            setCurrentLocation(newLocation);
+          }
+        );
+      } catch (error) {
+        console.error('Error watching location:', error);
+      }
+    };
+    startWatching();
+    return () => {
+      if (subscription) subscription.remove();
+    };
+  }, []);
+
+  // Sprawdzenie dotarcia do waypointu: jeśli użytkownik jest w promieniu 50 m,
+  // odtwarzamy sygnał dźwiękowy oraz wyświetlamy alert.
+  useEffect(() => {
+    if (currentLocation && waypoints.length) {
+      waypoints.forEach((wp, idx) => {
+        if (!reached.includes(idx)) {
+          const dist = getDistance(currentLocation.lat, currentLocation.lng, wp.lat, wp.lng);
+          if (dist < 50) {
+            console.log(`Waypoint ${idx + 1} reached, distance: ${dist}m`);
+            setReached(prev => [...prev, idx]);
+            arrivalSound.play(success => {
+              if (success) {
+                console.log('Arrival sound played successfully');
+              } else {
+                console.error('Playback failed');
+              }
+            });
+            Alert.alert(wp.name, wp.description);
+          }
+        }
+      });
+    }
+  }, [currentLocation, waypoints, reached]);
+
   const openFullNavigation = (
     orderedWaypoints: Waypoint[],
-    currentLocation: { lat: number; lng: number }
+    currentLoc: { lat: number; lng: number }
   ) => {
-    // Aktualna lokalizacja jako punkt startowy:
-    const origin = `${currentLocation.lat},${currentLocation.lng}`;
-    // Ostatni punkt na liście jako destynacja:
+    const origin = `${currentLoc.lat},${currentLoc.lng}`;
     const destination = orderedWaypoints[orderedWaypoints.length - 1];
-    // Pozostałe punkty to waypointy (łączymy je separatorem "|")
     const waypointsStr = orderedWaypoints
       .slice(0, -1)
       .map(wp => `${wp.lat},${wp.lng}`)
@@ -70,7 +147,6 @@ export default function NavigationScreen() {
 
     const url = `google.navigation:q=${destination.lat},${destination.lng}&waypoints=${waypointsStr}`;
     Linking.openURL(url).catch(() => {
-      // Fallback – otwiera Google Maps w przeglądarce
       const mapsUrl =
         `https://www.google.com/maps/dir/?api=1` +
         `&origin=${origin}` +
@@ -81,14 +157,11 @@ export default function NavigationScreen() {
     });
   };
 
-  // Funkcja generująca HTML dla WebView z mapą Google,
-  // wykorzystując aktualną kolejność waypointów
   const getMapHTML = () => {
     if (!route || !currentLocation || !waypoints?.length) {
       console.log('Missing data for map:', { route, currentLocation, waypoints });
       return '';
     }
-
     console.log('Generating map with waypoints:', waypoints);
     return `
       <!DOCTYPE html>
@@ -109,15 +182,11 @@ export default function NavigationScreen() {
                 zoom: 12,
                 center: { lat: ${currentLocation.lat}, lng: ${currentLocation.lng} }
               });
-
-              // Marker aktualnej lokalizacji
               new google.maps.Marker({
                 position: { lat: ${currentLocation.lat}, lng: ${currentLocation.lng} },
                 map: map,
                 title: 'Your location'
               });
-
-              // Dodaj markery dla waypointów
               ${waypoints.map((wp, index) => `
                 new google.maps.Marker({
                   position: { lat: ${wp.lat}, lng: ${wp.lng} },
@@ -126,15 +195,9 @@ export default function NavigationScreen() {
                   label: '${index + 1}'
                 });
               `).join('')}
-
-              // Rysowanie trasy między punktami
               const directionsService = new google.maps.DirectionsService();
-              const directionsRenderer = new google.maps.DirectionsRenderer({
-                map: map
-              });
-              const waypointsJs = ${JSON.stringify(waypoints.map(wp => ({
-                location: { lat: wp.lat, lng: wp.lng }
-              })))};
+              const directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
+              const waypointsJs = ${JSON.stringify(waypoints.map(wp => ({ location: { lat: wp.lat, lng: wp.lng } })))};
               directionsService.route({
                 origin: { lat: ${currentLocation.lat}, lng: ${currentLocation.lng} },
                 destination: waypointsJs[waypointsJs.length - 1].location,
@@ -153,11 +216,9 @@ export default function NavigationScreen() {
     `;
   };
 
-  // Funkcja renderująca pojedynczy element listy waypointów
   const renderWaypoint = (params: RenderItemParams<Waypoint>): JSX.Element => {
     const { item, drag, isActive, getIndex } = params;
-    const index = getIndex() !== undefined ? getIndex() : 0;
-    const safeIndex = index ?? 0;
+    const index = getIndex() ?? 0;
     return (
       <ScaleDecorator>
         <TouchableOpacity
@@ -171,7 +232,7 @@ export default function NavigationScreen() {
         >
           <View style={styles.waypointContent}>
             <Text style={styles.waypointName}>
-              {safeIndex + 1}. {item.name}
+              {index + 1}. {item.name}
             </Text>
             <Text style={styles.waypointDescription}>{item.description}</Text>
           </View>
@@ -219,7 +280,7 @@ export default function NavigationScreen() {
       </View>
     </GestureHandlerRootView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -251,9 +312,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  waypointsContainer: {
-    flex: 1,
-  },
   waypointItem: {
     padding: 12,
     borderBottomWidth: 1,
@@ -274,3 +332,5 @@ const styles = StyleSheet.create({
     padding: 10,
   },
 });
+
+export default NavigationScreen;

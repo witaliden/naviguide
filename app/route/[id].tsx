@@ -31,14 +31,14 @@ export default function RouteDetailsScreen() {
       await routeService.syncRoutes();
       Alert.alert(
         "Success",
-        "Route has been downloaded successfully and is available offline",
+        "Szlak został zapisany na urządzeniu.",
         [
           { text: "OK" }
         ]);
     } catch (error) {
         Alert.alert(
             "Error",
-            "Failed to download route. Please try again later.",
+            "Błąd podczas zapisywania szlaku na urządzeniu.",
             [
               { text: "OK" }
             ]);
@@ -75,14 +75,14 @@ export default function RouteDetailsScreen() {
           style={[styles.button, styles.downloadButton]} 
           onPress={handleDownloadRoute}
         >
-          <Text style={styles.buttonText}>Download Route</Text>
+          <Text style={styles.buttonText}>Zapisz</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[styles.button, styles.navigationButton]} 
           onPress={handleStartNavigation}
         >
-          <Text style={styles.buttonText}>Start Navigation</Text>
+          <Text style={styles.buttonText}>Rozpocznij</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
