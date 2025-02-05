@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Route, Waypoint } from '../types/models';
 
-// const API_URL = 'http://10.0.2.2:8080/api';
-const API_URL = 'http://192.168.1.133:8080/api';
+const API_URL = 'http://10.0.2.2:8080/api';
+// const API_URL = 'http://192.168.1.133:8080/api';
 const ROUTES_CACHE_KEY = 'routes_cache';
 const WAYPOINTS_CACHE_KEY = 'waypoints_cache';
 
@@ -30,6 +30,30 @@ export const routeService = {
       throw error;
     }
   },
+
+  async forceRefreshRoutes(): Promise<Route[]> {
+    try {
+      const response = await axios.get(`${API_URL}/routes`);
+      const routes = response.data;
+      
+      await AsyncStorage.setItem(ROUTES_CACHE_KEY, JSON.stringify(routes));
+      
+      // Odświeżanie waypointów
+      for (const route of routes) {
+        const routeDetails = await axios.get(`${API_URL}/routes/${route.id}`);
+        await AsyncStorage.setItem(
+          `${WAYPOINTS_CACHE_KEY}_${route.id}`,
+          JSON.stringify(routeDetails.data)
+        );
+      }
+      
+      return routes;
+    } catch (error) {
+      console.error('Error refreshing routes:', error);
+      throw error;
+    }
+  },
+   
 
   async getRouteWithWaypoints(routeId: number): Promise<Route> {
     try {
