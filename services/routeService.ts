@@ -3,7 +3,6 @@ import axios from 'axios';
 import { Route, Waypoint } from '../types/models';
 
 const API_URL = 'http://10.0.2.2:8080/api';
-// const API_URL = 'http://192.168.1.133:8080/api';
 const ROUTES_CACHE_KEY = 'routes_cache';
 const WAYPOINTS_CACHE_KEY = 'waypoints_cache';
 

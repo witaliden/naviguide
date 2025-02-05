@@ -40,11 +40,23 @@ export default function NavigationScreen() {
     }
   };
 
-  const openNativeNavigation = (waypoint: Waypoint) => {
-    const url = `google.navigation:q=${waypoint.lat},${waypoint.lng}`;
+  const openFullNavigation = (waypoints: Waypoint[], currentLocation: { lat: number; lng: number }) => {
+    // Dodaj aktualną lokalizację jako punkt startowy
+    const origin = `${currentLocation.lat},${currentLocation.lng}`;
+    const destination = waypoints[waypoints.length - 1];
+    const waypointsStr = waypoints.slice(0, -1)
+      .map(wp => `${wp.lat},${wp.lng}`)
+      .join('|');
+  
+    const url = `google.navigation:q=${destination.lat},${destination.lng}&waypoints=${waypointsStr}`;
+    
     Linking.openURL(url).catch(() => {
       // Fallback dla iOS lub gdy Google Maps nie jest zainstalowane
-      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${waypoint.lat},${waypoint.lng}`;
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1`
+        + `&origin=${origin}`
+        + `&destination=${destination.lat},${destination.lng}`
+        + `&waypoints=${waypointsStr}`
+        + `&travelmode=driving`;
       Linking.openURL(mapsUrl);
     });
   };
@@ -139,20 +151,27 @@ export default function NavigationScreen() {
         incognito={true}
       />
       <View style={styles.waypointsList}>
-        {route.waypoints.map((waypoint, index) => (
-          <TouchableOpacity
-            key={waypoint.id}
-            style={styles.waypointItem}
-            onPress={() => openNativeNavigation(waypoint)}
-          >
-            <Text style={styles.waypointName}>
-              {index + 1}. {waypoint.name}
-            </Text>
-            <Text style={styles.waypointDescription}>
-              {waypoint.description}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity
+          style={styles.navigateAllButton}
+          onPress={() => openFullNavigation(route.waypoints, currentLocation)}
+        >
+          <Text style={styles.navigateAllButtonText}>Navigate Through All Points</Text>
+        </TouchableOpacity>
+        <View style={styles.waypointsContainer}>
+          {route.waypoints.map((waypoint, index) => (
+            <View
+              key={waypoint.id}
+              style={styles.waypointItem}
+            >
+              <Text style={styles.waypointName}>
+                {index + 1}. {waypoint.name}
+              </Text>
+              <Text style={styles.waypointDescription}>
+                {waypoint.description}
+              </Text>
+            </View>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -171,10 +190,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'white',
-    maxHeight: '30%',
+    maxHeight: '40%',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 16,
+  },
+  navigateAllButton: {
+    backgroundColor: '#2196F3',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  navigateAllButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  waypointsContainer: {
+    flex: 1,
   },
   waypointItem: {
     padding: 12,
