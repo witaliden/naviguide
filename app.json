@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "config": {
-        "googleMapsApiKey": "AIzaSyAjwjfLA-HLaezjuvt6k4M-ZpeCm-CVQs0"
+        "googleMapsApiKey": "ENTER_YOUR_KEY"
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to show your position on the map.",
@@ -26,7 +26,7 @@
       },
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyAjwjfLA-HLaezjuvt6k4M-ZpeCm-CVQs0"
+          "apiKey": "ENTER_YOUR_KEY"
         }
       },
       "permissions": [
