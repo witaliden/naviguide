@@ -1,3 +1,6 @@
+import 'dotenv/config';
+
+export default
 {
   "expo": {
     "name": "naviguide",
@@ -11,13 +14,14 @@
     "ios": {
       "supportsTablet": true,
       "config": {
-        "googleMapsApiKey": "ENTER_YOUR_KEY"
+        "googleMapsApiKey": process.env.GOOGLE_MAPS_API_KEY
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to show your position on the map.",
         "NSLocationAlwaysUsageDescription": "This app needs access to location to show your position on the map.",
         "UIBackgroundModes": ["location", "audio"]
-      }
+      },
+      "jsEngine": "jsc"
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +30,7 @@
       },
       "config": {
         "googleMaps": {
-          "apiKey": "ENTER_YOUR_KEY"
+          "apiKey": process.env.GOOGLE_MAPS_API_KEY
         }
       },
       "permissions": [

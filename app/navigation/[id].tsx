@@ -1,21 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, Linking, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import Constants from 'expo-constants';
 import { WebView } from 'react-native-webview';
 import { routeService } from '../../services/routeService';
 import * as Location from 'expo-location';
 import { Route, Waypoint } from '../../types/models';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView, TouchableOpacity } from 'react-native-gesture-handler';
-import Sound from 'react-native-sound';
+import { Audio } from 'expo-av';
 
-Sound.setCategory('Playback');
-const arrivalSound = new Sound('arrival.mp3', Sound.MAIN_BUNDLE, error => {
-  if (error) {
-    console.error('Failed to load the sound', error);
-  }
-});
+
+async function playArrivalSound() {
+  const { sound } = await Audio.Sound.createAsync(
+    require('../../assets/audio/success.mp3')
+  );
+
+  sound.setOnPlaybackStatusUpdate(status => {
+    if (status && 'didJustFinish' in status && status.didJustFinish) {
+      console.log('Arrival sound played successfully');
+    }
+  });
+
+  await sound.playAsync().catch(error => {
+    console.error('Playback failed', error);
+  });
+}
 
 const getDistance = (
   lat1: number, lon1: number, lat2: number, lon2: number
@@ -34,10 +43,8 @@ const getDistance = (
   return R * c;
 };
 
-// Przenieś deklarację funkcji loadRouteAndLocation na początek,
-// aby można było ją wywołać w useEffect poniżej
 const NavigationScreen = () => {
-  const googleMapsApiKey = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;
+  const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY
   const { id } = useLocalSearchParams();
   const [route, setRoute] = useState<Route | null>(null);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -120,13 +127,7 @@ const NavigationScreen = () => {
           if (dist < 50) {
             console.log(`Waypoint ${idx + 1} reached, distance: ${dist}m`);
             setReached(prev => [...prev, idx]);
-            arrivalSound.play(success => {
-              if (success) {
-                console.log('Arrival sound played successfully');
-              } else {
-                console.error('Playback failed');
-              }
-            });
+            playArrivalSound();
             Alert.alert(wp.name, wp.description);
           }
         }
