@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useLayoutEffect, useState} from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { View, StyleSheet, Text, Linking, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
-import { routeService } from '../../services/routeService';
+import { routeService } from '@/services/routeService';
 import * as Location from 'expo-location';
-import { Route, Waypoint } from '../../types/models';
+import { Route, Waypoint } from '@/types/models';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView, TouchableOpacity } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
@@ -50,6 +51,7 @@ const NavigationScreen = () => {
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [reached, setReached] = useState<number[]>([]);
+  const navigation = useNavigation();
 
   // Funkcja ładowania trasy oraz lokalizacji
   const loadRouteAndLocation = async () => {
@@ -75,6 +77,12 @@ const NavigationScreen = () => {
   useEffect(() => {
     loadRouteAndLocation();
   }, [id]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: `Ustaw kolejność`,
+    });
+  }, [navigation, id]);
 
   // Po ustawieniu trasy kopiujemy waypointy do stanu (umożliwia zmianę kolejności)
   useEffect(() => {
@@ -266,7 +274,7 @@ const NavigationScreen = () => {
           onPress={() => openFullNavigation(waypoints, currentLocation)}
         >
           <Text style={styles.navigateAllButtonText}>
-            Navigate Through All Points
+            Rozpocznij wycieczkę
           </Text>
         </TouchableOpacity>
         <DraggableFlatList

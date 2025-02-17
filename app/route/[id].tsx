@@ -1,18 +1,26 @@
+import React, {useEffect, useLayoutEffect, useState} from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { routeService } from '../../services/routeService';
-import { useState, useEffect } from 'react';
-import { Route, Waypoint } from '../../types/models';
+import { routeService } from '@/services/routeService';
+import { Route, Waypoint } from '@/types/models';
 
 export default function RouteDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [route, setRoute] = useState<Route | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
 
   useEffect(() => {
     loadRouteDetails();
   }, [id]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: `Trasa ${id}`,
+    });
+  }, [navigation, id]);
 
   const loadRouteDetails = async () => {
     try {
